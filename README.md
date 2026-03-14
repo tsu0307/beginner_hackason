@@ -1,3 +1,4 @@
+<!-- 役割: プロジェクト概要と開発者向けの基本的な実行手順をまとめる。 -->
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

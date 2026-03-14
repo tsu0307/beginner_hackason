@@ -1,3 +1,4 @@
+// 役割: "/life-branches" で表示する独立ページ。シミュレーターの別ルート版を提供する。
 "use client";
 
 import { useState } from "react";

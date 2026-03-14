@@ -1,3 +1,4 @@
+// 役割: ESLint の設定ファイル。コード検査の設定とビルド生成物の除外を定義する。
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 

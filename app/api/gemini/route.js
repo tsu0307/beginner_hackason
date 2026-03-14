@@ -1,3 +1,4 @@
+// 役割: フロントエンドからの要求を受けて Gemini API へ中継するサーバーAPIルート。
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 

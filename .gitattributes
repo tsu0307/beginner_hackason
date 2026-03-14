@@ -1,2 +1,3 @@
+# 役割: このリポジトリ内のファイル属性や改行の扱いを Git でそろえる。
 # Auto detect text files and perform LF normalization
 * text=auto

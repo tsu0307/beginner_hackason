@@ -1,3 +1,4 @@
+// 役割: 全ページ共通のルートレイアウト。グローバルCSSとメタデータを読み込む。
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 

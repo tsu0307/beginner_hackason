@@ -1,3 +1,5 @@
+// 役割: 人生分岐シミュレーターのメインUI。画面状態の管理と Gemini API 呼び出しを担当する。
+"use client";
 import { useState } from "react";
 
 // ============================================================
@@ -6,11 +8,11 @@ import { useState } from "react";
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 async function claude(system, userMsg) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "gemini-flash-latest",
       max_tokens: 1000,
       system,
       messages: [{ role: "user", content: userMsg }],

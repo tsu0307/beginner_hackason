@@ -1,3 +1,4 @@
+/* 役割: サイト全体で使うデザイントークン、基本スタイル、共通アニメーションを定義する。 */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@300;400;600&display=swap');
 
 :root {

@@ -1,3 +1,4 @@
+// 役割: .env.local の値を使って Gemini SDK の接続確認を行うローカル検証用スクリプト。
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 

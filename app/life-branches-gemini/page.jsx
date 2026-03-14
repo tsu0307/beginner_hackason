@@ -1,3 +1,4 @@
+// 役割: "/life-branches-gemini" で表示する独立ページ。Gemini 前提の派生版を提供する。
 "use client";
 
 import { useState } from "react";
