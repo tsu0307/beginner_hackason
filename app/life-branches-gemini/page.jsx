@@ -7,27 +7,12 @@ import { useState } from "react";
 // UTILITIES  (Gemini API version)
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
-import { GoogleGenAI } from "@google/genai";
-
-// The client gets the API key from the environment variable `GEMINI_API_KEY`.
-const ai = new GoogleGenAI({});
-
-async function main() {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: "Explain how AI works in a few words",
-  });
-  console.log(response.text);
-}
-
-main();
-
 async function gemini(system, userMsg) {
   const res = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "gemini-1.5-flash",
+      model: "gemini-flash-latest",
       max_tokens: 1000,
       system,
       messages: [{ role: "user", content: userMsg }],
@@ -38,16 +23,37 @@ async function gemini(system, userMsg) {
     throw new Error(err.error?.message || `HTTP ${res.status}`);
   }
   const data = await res.json();
-  // Proxy がすでに Claude 形式に整形してくれていることを想定
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
 function parseJson(text) {
-  const s = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  try { return JSON.parse(s); } catch {
+  if (!text) throw new Error("AIからのレスポンスが空です");
+  
+  // Markdown のコードブロックを除去
+  let s = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  
+  try {
+    return JSON.parse(s);
+  } catch (e) {
+    console.warn("JSON.parse failed, attempting healing:", text);
+    
+    // 途中で切れている場合の簡易的な補完案
+    if (s.includes('"branches":') && !s.includes(']}')) {
+       // branches のリストが途切れている場合
+       if (s.endsWith('"')) s += '}]}';
+       else if (s.endsWith(',')) s += '{}]}';
+       else s += '"}]}';
+       try { return JSON.parse(s); } catch(e3) {}
+    }
+
+    // {} で囲まれた部分を抽出
     const m = s.match(/\{[\s\S]*\}/);
-    if (m) try { return JSON.parse(m[0]); } catch {}
-    throw new Error("JSONのパースに失敗しました");
+    if (m) {
+      try { return JSON.parse(m[0]); } catch (e2) {}
+    }
+    
+    console.error("Final parse failure. Text:", text);
+    throw new Error(`JSONのパースに失敗しました (内容が途切れている可能性があります)`);
   }
 }
 
@@ -722,7 +728,7 @@ export default function App() {
   const [loadingMsg, setLoadingMsg] = useState("AIが考えています...");
   const [error, setError] = useState("");
   const [story, setStory] = useState("");
-  const [useMock, setUseMock] = useState(true); // Default to Mock for development
+  const [useMock, setUseMock] = useState(false); // Changed to false to use Gemini by default
   const [prevView, setPrevView] = useState("result");
 
   async function callAI(sys, msg, type) {
@@ -748,8 +754,8 @@ export default function App() {
         ...b, id: uid(), parentId: parentNode.id, selected: false,
       }));
       setBranches(nb); setView("branches");
-    } catch {
-      setError("分岐の生成に失敗しました。もう一度お試しください。");
+    } catch (err) {
+      setError(`分岐の生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 
@@ -772,8 +778,8 @@ export default function App() {
       const sel = { ...branch, result: parsed.result || "結果を取得できませんでした", happiness: parsed.happiness || "medium", selected: true };
       const others = branches.filter(b => b.id !== branch.id);
       setNodes([...nodes, sel, ...others]); setCurrentNodeId(sel.id); setBranches([]); setView("result");
-    } catch {
-      setError("結果の生成に失敗しました。もう一度お試しください。");
+    } catch (err) {
+      setError(`結果の生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 
@@ -801,8 +807,8 @@ export default function App() {
       const text = await callAI(sys, msg, "story");
       setStory(text.startsWith("{") ? JSON.parse(text).text : text); 
       setView("story");
-    } catch {
-      setError("ストーリーの生成に失敗しました。");
+    } catch (err) {
+      setError(`ストーリーの生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 

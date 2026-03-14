@@ -8,12 +8,12 @@ import { useState } from "react";
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-async function claude(system, userMsg) {
-  const res = await fetch("/api/claude", {
+async function gemini(system, userMsg) {
+  const res = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-3-5-sonnet-20240620",
+      model: "gemini-flash-latest",
       max_tokens: 1000,
       system,
       messages: [{ role: "user", content: userMsg }],
@@ -28,11 +28,24 @@ async function claude(system, userMsg) {
 }
 
 function parseJson(text) {
-  const s = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-  try { return JSON.parse(s); } catch {
+  if (!text) throw new Error("AIからのレスポンスが空です");
+  let s = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  try {
+    return JSON.parse(s);
+  } catch (e) {
+    console.warn("JSON.parse failed, attempting healing:", text);
+    if (s.includes('"branches":') && !s.includes(']}')) {
+       if (s.endsWith('"')) s += '}]}';
+       else if (s.endsWith(',')) s += '{}]}';
+       else s += '"}]}';
+       try { return JSON.parse(s); } catch(e3) {}
+    }
     const m = s.match(/\{[\s\S]*\}/);
-    if (m) try { return JSON.parse(m[0]); } catch {}
-    throw new Error("JSONのパースに失敗しました");
+    if (m) {
+      try { return JSON.parse(m[0]); } catch (e2) {}
+    }
+    console.error("Final parse failure. Text:", text);
+    throw new Error(`JSONのパースに失敗しました (内容が途切れている可能性があります)`);
   }
 }
 
@@ -690,15 +703,15 @@ export default function App() {
     setLoading(true); setLoadingMsg("分岐を生成しています..."); setError("");
     try {
       const { sys, msg } = promptBranch(prof, parentNode.event, history);
-      const text = await claude(sys, msg);
+      const text = await gemini(sys, msg);
       const parsed = parseJson(text);
       if (!parsed?.branches?.length) throw new Error("Invalid response");
       const nb = parsed.branches.map(b => ({
         ...b, id: uid(), parentId: parentNode.id, selected: false,
       }));
       setBranches(nb); setView("branches");
-    } catch {
-      setError("分岐の生成に失敗しました。もう一度お試しください。");
+    } catch (err) {
+      setError(`分岐の生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 
@@ -716,13 +729,13 @@ export default function App() {
     try {
       const history = nodes.filter(n => n.selected).map(n => n.event);
       const { sys, msg } = promptResult(profile, branch.event, history);
-      const text = await claude(sys, msg);
+      const text = await gemini(sys, msg);
       const parsed = parseJson(text);
       const sel = { ...branch, result: parsed.result || "結果を取得できませんでした", happiness: parsed.happiness || "medium", selected: true };
       const others = branches.filter(b => b.id !== branch.id);
       setNodes([...nodes, sel, ...others]); setCurrentNodeId(sel.id); setBranches([]); setView("result");
-    } catch {
-      setError("結果の生成に失敗しました。もう一度お試しください。");
+    } catch (err) {
+      setError(`結果の生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 
@@ -747,10 +760,10 @@ export default function App() {
     setLoading(true); setLoadingMsg("ストーリーを生成しています..."); setError("");
     try {
       const { sys, msg } = promptStory(profile, nodes.filter(n => n.selected));
-      const text = await claude(sys, msg);
+      const text = await gemini(sys, msg);
       setStory(text); setPrevView(view); setView("story");
-    } catch {
-      setError("ストーリーの生成に失敗しました。");
+    } catch (err) {
+      setError(`ストーリーの生成に失敗しました: ${err.message}`);
     } finally { setLoading(false); }
   }
 
