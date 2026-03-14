@@ -4,16 +4,30 @@ import { useState } from "react";
 
 
 // ============================================================
-// UTILITIES  (unchanged)
+// UTILITIES  (Gemini API version)
 // ============================================================
 const uid = () => Math.random().toString(36).slice(2, 9);
+import { GoogleGenAI } from "@google/genai";
 
-async function claude(system, userMsg) {
-  const res = await fetch("/api/claude", {
+// The client gets the API key from the environment variable `GEMINI_API_KEY`.
+const ai = new GoogleGenAI({});
+
+async function main() {
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: "Explain how AI works in a few words",
+  });
+  console.log(response.text);
+}
+
+main();
+
+async function gemini(system, userMsg) {
+  const res = await fetch("/api/gemini", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-3-5-sonnet-20240620",
+      model: "gemini-1.5-flash",
       max_tokens: 1000,
       system,
       messages: [{ role: "user", content: userMsg }],
@@ -24,6 +38,7 @@ async function claude(system, userMsg) {
     throw new Error(err.error?.message || `HTTP ${res.status}`);
   }
   const data = await res.json();
+  // Proxy がすでに Claude 形式に整形してくれていることを想定
   return data.content?.find((b) => b.type === "text")?.text || "";
 }
 
@@ -40,37 +55,50 @@ function parseJson(text) {
 // DESIGN TOKENS
 // ============================================================
 const T = {
-  bg:          "#0e0e10",
-  surface:     "#161618",
-  surface2:    "#1c1c1f",
-  border:      "#28282c",
-  borderSub:   "#222225",
-  text:        "#e4e4e7",
-  textSub:     "#a1a1aa",
-  textMuted:   "#71717a",
-  textFaint:   "#3f3f46",
-  accent:      "#c9b99a",
-  accentBg:    "rgba(201,185,154,0.08)",
-  accentBd:    "rgba(201,185,154,0.22)",
-  errorText:   "#f87171",
-  errorBg:     "rgba(248,113,113,0.07)",
-  errorBd:     "rgba(248,113,113,0.18)",
+  bg:          "var(--bg)",
+  surface:     "var(--surface)",
+  surface2:    "var(--surface-hover)",
+  border:      "var(--border)",
+  borderSub:   "var(--border)",
+  text:        "var(--text)",
+  textSub:     "var(--text-sub)",
+  textMuted:   "var(--text-muted)",
+  textFaint:   "rgba(255,255,255,0.1)",
+  accent:      "var(--accent)",
+  accentBg:    "var(--accent-dim)",
+  accentBd:    "var(--accent-glow)",
+  errorText:   "var(--error)",
+  errorBg:     "rgba(239, 68, 68, 0.1)",
+  errorBd:     "rgba(239, 68, 68, 0.2)",
+};
+
+const MOCK_RESPONSE = {
+  branch: {
+    branches: [
+      { event: "地元の伝統工芸を現代風にアレンジする工房を立ち上げ、SNSで話題になる。", stability: "medium", challenge: "high" },
+      { event: "大手のデザイン事務所に就職し、安定した環境で基礎からスキルを磨く。", stability: "high", challenge: "low" }
+    ]
+  },
+  result: {
+    result: "あなたの選択は予想以上の反響を呼びました。初期の苦労はありましたが、独自の視点が評価され、新しいコミュニティが形成されつつあります。日々に確かな手応えを感じています。",
+    happiness: "high"
+  },
+  story: "あなたは安定よりも自分の直感を信じ、独自の道を切り拓きました。最初は周囲の反対もありましたが、地道な努力と創造性が実を結び、現在では多くの人々にインスピレーションを与える存在となっています。"
 };
 
 // ============================================================
-// CONSTANTS  (unchanged)
+// CONSTANTS
 // ============================================================
 const LVL = { high: "高", medium: "中", low: "低" };
 const HAPP_ICON  = { high: "○", medium: "△", low: "×" };
 const HAPP_LABEL = { high: "充実している", medium: "まあまあ", low: "辛い時期" };
 
-// Muted monochrome badge colors
 const STAB_C = { high: "#a1a1aa", medium: "#71717a", low: "#52525b" };
 const CHAL_C = { high: "#c9b99a", medium: "#a1a1aa", low: "#52525b" };
 const HAPP_C = { high: "#c9b99a", medium: "#a1a1aa", low: "#52525b" };
 
 // ============================================================
-// PROMPTS  (unchanged)
+// PROMPTS
 // ============================================================
 function promptBranch(p, event, hist) {
   const h = hist.length ? `\nこれまでの流れ: ${hist.join(" → ")}` : "";
@@ -108,23 +136,23 @@ function promptFormat(p, input, currentEvent) {
 // ============================================================
 // BASE COMPONENTS
 // ============================================================
-
-/** シンプルなカードコンテナ */
 function Card({ children, style: s, accent }) {
   return (
     <div style={{
       background: T.surface,
-      border: `1px solid ${accent ? T.accentBd : T.border}`,
-      borderRadius: 12,
-      padding: "1.5rem",
+      backdropFilter: "var(--glass-blur)",
+      WebkitBackdropFilter: "var(--glass-blur)",
+      border: `1px solid ${accent ? "var(--border-strong)" : T.border}`,
+      borderRadius: 16,
+      padding: "1.75rem",
+      boxShadow: "var(--shadow-sm)",
       ...s,
-    }}>
+    }} className="fade-in">
       {children}
     </div>
   );
 }
 
-/** テキスト入力・テキストエリア共通 */
 function Field({ label, value, onChange, placeholder, rows, type, hint }) {
   return (
     <div style={{ marginBottom: 18 }}>
@@ -164,35 +192,39 @@ function fieldStyle() {
   };
 }
 
-/** ボタン */
 function Btn({ children, onClick, variant = "primary", disabled, full, small, style: s }) {
+  const [hov, setHov] = useState(false);
   const styles = {
     primary: {
-      background: T.accent, color: "#0e0e10",
+      background: "var(--accent)", color: "#0a0a0c",
       border: "none", fontWeight: 600,
+      boxShadow: hov ? "0 0 20px var(--accent-glow)" : "none",
     },
     secondary: {
-      background: "transparent", color: T.textSub,
-      border: `1px solid ${T.border}`,
+      background: "transparent", color: "var(--text)",
+      border: `1px solid var(--border-strong)`,
     },
     ghost: {
-      background: "transparent", color: T.textMuted,
+      background: "transparent", color: "var(--text-muted)",
       border: "none",
     },
   };
   return (
     <button
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        padding: small ? "6px 14px" : "10px 22px",
-        borderRadius: 8,
+        padding: small ? "7px 16px" : "12px 24px",
+        borderRadius: 10,
         cursor: disabled ? "not-allowed" : "pointer",
-        fontSize: small ? "0.78rem" : "0.88rem",
-        transition: "opacity 0.15s, background 0.15s",
+        fontSize: small ? "0.78rem" : "0.9rem",
+        transition: "var(--transition)",
         opacity: disabled ? 0.4 : 1,
         width: full ? "100%" : undefined,
         fontFamily: "inherit",
-        letterSpacing: "0.01em",
+        letterSpacing: "0.02em",
+        transform: hov && !disabled ? "scale(1.02)" : "scale(1)",
         ...styles[variant],
         ...s,
       }}
@@ -202,7 +234,6 @@ function Btn({ children, onClick, variant = "primary", disabled, full, small, st
   );
 }
 
-/** ラベルバッジ */
 function Badge({ label, color = T.textMuted }) {
   return (
     <span style={{
@@ -216,21 +247,25 @@ function Badge({ label, color = T.textMuted }) {
   );
 }
 
-/** ローディング */
-function Spinner({ label = "AIが考えています..." }) {
+function Spinner({ label = "AIが可能性を紡いでいます..." }) {
   return (
-    <div style={{ textAlign: "center", padding: "5rem 1rem" }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: "50%", margin: "0 auto 1.25rem",
-        border: `2px solid ${T.border}`, borderTopColor: T.accent,
-        animation: "spin 0.9s linear infinite",
-      }} />
-      <p style={{ color: T.textMuted, fontSize: "0.84rem" }}>{label}</p>
+    <div style={{ textAlign: "center", padding: "6rem 1rem", animation: "fadeIn 0.5s ease-out" }}>
+      <div style={{ position: "relative", width: 40, height: 40, margin: "0 auto 2rem" }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+          borderRadius: "50%", border: "2px solid var(--border)",
+        }} />
+        <div style={{
+          position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+          borderRadius: "50%", border: "2px solid transparent", borderTopColor: "var(--accent)",
+          animation: "spin 1s cubic-bezier(0.5, 0, 0.5, 1) infinite",
+        }} />
+      </div>
+      <p style={{ color: "var(--text-sub)", fontSize: "0.9rem", fontWeight: 300, letterSpacing: "0.05em" }}>{label}</p>
     </div>
   );
 }
 
-/** セクションラベル（小見出し） */
 function Label({ children }) {
   return (
     <p style={{ fontSize: "0.72rem", color: T.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 0.5rem" }}>
@@ -239,7 +274,6 @@ function Label({ children }) {
   );
 }
 
-/** 区切り線 */
 function Divider({ style: s }) {
   return <div style={{ height: 1, background: T.border, margin: "1.25rem 0", ...s }} />;
 }
@@ -298,16 +332,17 @@ function SetupView({ onComplete }) {
   const valid = name.trim() && selectedInterests.length > 0 && selectedPersonality.length > 0 && age > 0 && age < 100;
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: "3.5rem 1.25rem 4rem" }}>
-      <div style={{ marginBottom: "2.75rem" }}>
-        <p style={{ fontSize: "0.7rem", color: T.textMuted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "0.75rem" }}>
+    <div style={{ maxWidth: 520, margin: "0 auto", padding: "4rem 1.5rem 6rem", animation: "fadeIn 0.8s ease-out" }}>
+      <div style={{ marginBottom: "3.5rem", textAlign: "center" }}>
+        <p style={{ fontSize: "0.75rem", color: "var(--accent)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: "1rem" }}>
           Life Simulator
         </p>
-        <h1 style={{ fontSize: "2.2rem", color: T.text, margin: 0, fontWeight: 300, lineHeight: 1.2, letterSpacing: "-0.01em" }}>
+        <h1 style={{ fontSize: "3rem", color: "var(--text)", margin: 0, fontWeight: 300, lineHeight: 1.1, letterSpacing: "-0.03em" }}>
           人生の分岐点
         </h1>
-        <p style={{ color: T.textMuted, marginTop: "0.9rem", fontSize: "0.86rem", lineHeight: 1.8 }}>
-          あなたのプロフィールをもとに、AIが人生の選択肢を生成します。
+        <div style={{ width: 40, height: 2, background: "var(--accent)", margin: "1.5rem auto" }} />
+        <p style={{ color: "var(--text-sub)", marginTop: "1rem", fontSize: "0.95rem", lineHeight: 1.8, maxWidth: "400px", margin: "0 auto" }}>
+          あなたのプロフィールをもとに、AIがまだ見ぬ人生の可能性を紡ぎ出します。
         </p>
       </div>
 
@@ -354,14 +389,14 @@ function EventInputView({ profile, onSubmit }) {
   const [event, setEvent] = useState("");
 
   return (
-    <div style={{ maxWidth: 520, margin: "0 auto", padding: "3rem 1.25rem" }}>
-      <div style={{ marginBottom: "2rem" }}>
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "4rem 1.5rem", animation: "fadeIn 0.6s ease-out" }}>
+      <div style={{ marginBottom: "2.5rem" }}>
         <Label>Step 1</Label>
-        <h2 style={{ fontSize: "1.5rem", color: T.text, margin: "0 0 0.5rem", fontWeight: 400, letterSpacing: "-0.01em" }}>
-          人生の分岐点を教えて
+        <h2 style={{ fontSize: "2rem", color: "var(--text)", margin: "0 0 0.75rem", fontWeight: 400 }}>
+          人生の分岐点を描く
         </h2>
-        <p style={{ color: T.textMuted, fontSize: "0.84rem", lineHeight: 1.75, margin: 0 }}>
-          選択を迫られた出来事を入力してください。
+        <p style={{ color: "var(--text-sub)", fontSize: "0.9rem", lineHeight: 1.8, margin: 0 }}>
+          あなたの人生において、重要だった決断や、これから起こりうる選択を教えてください。
         </p>
       </div>
 
@@ -445,13 +480,13 @@ function BranchesView({ branches, onSelect, onAddCustom, currentNode, stepCount 
   };
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "3rem 1.25rem" }}>
-      <div style={{ marginBottom: "2rem" }}>
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "4rem 1.5rem", animation: "fadeIn 0.6s ease-out" }}>
+      <div style={{ marginBottom: "2.5rem" }}>
         <Label>Step {stepCount + 1}</Label>
-        <h2 style={{ fontSize: "1.5rem", color: T.text, margin: "0 0 0.4rem", fontWeight: 400, letterSpacing: "-0.01em" }}>
-          2つの分岐
+        <h2 style={{ fontSize: "2rem", color: "var(--text)", margin: "0 0 0.5rem", fontWeight: 400 }}>
+          選ぶべき二つの路
         </h2>
-        <p style={{ color: T.textMuted, fontSize: "0.84rem", margin: 0 }}>どちらの道を選びますか？</p>
+        <p style={{ color: "var(--text-sub)", fontSize: "0.9rem", margin: 0 }}>どちらの可能性を探索しますか？</p>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1.5rem" }}>
@@ -489,10 +524,10 @@ function BranchesView({ branches, onSelect, onAddCustom, currentNode, stepCount 
 function ResultView({ node, onContinue, onViewTree, onViewStory, stepCount }) {
   const hc = HAPP_C[node.happiness] || T.textSub;
   return (
-    <div style={{ maxWidth: 530, margin: "0 auto", padding: "3rem 1.25rem" }}>
-      <div style={{ marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.5rem", color: T.text, margin: 0, fontWeight: 400, letterSpacing: "-0.01em" }}>
-          選択の結果
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "4rem 1.5rem", animation: "fadeIn 0.6s ease-out" }}>
+      <div style={{ marginBottom: "2.5rem" }}>
+        <h2 style={{ fontSize: "2rem", color: "var(--text)", margin: 0, fontWeight: 400 }}>
+          辿り着いた未来
         </h2>
       </div>
 
@@ -589,9 +624,10 @@ function TreeView({ nodes, onBack, profile }) {
               <path key={`e-${node.id}`}
                 d={`M${px},${py} C${px + HG / 2},${py} ${cx - HG / 2},${cy} ${cx},${cy}`}
                 fill="none"
-                stroke={sel ? T.accent : T.border}
-                strokeWidth={sel ? 1.5 : 1}
-                strokeDasharray={sel ? "none" : "4,3"}
+                stroke={sel ? "var(--accent)" : "var(--border)"}
+                strokeWidth={sel ? 2 : 1}
+                strokeDasharray={sel ? "none" : "4,4"}
+                style={{ opacity: sel ? 1 : 0.4 }}
               />
             );
           })}
@@ -600,24 +636,30 @@ function TreeView({ nodes, onBack, profile }) {
             const sel = node.selected;
             const hc = node.happiness ? HAPP_C[node.happiness] : null;
             return (
-              <g key={node.id}>
-                <rect x={pos.x} y={pos.y} width={NW} height={NH} rx={8}
-                  fill={sel ? "rgba(201,185,154,0.05)" : T.surface}
-                  stroke={sel ? T.accentBd : T.border}
-                  strokeWidth={1}
+              <g key={node.id} className="fade-in">
+                <rect x={pos.x} y={pos.y} width={NW} height={NH} rx={12}
+                  fill={sel ? "rgba(var(--accent-rgb), 0.08)" : "var(--surface)"}
+                  stroke={sel ? "var(--accent)" : "var(--border)"}
+                  strokeWidth={sel ? 1.5 : 1}
+                  style={{ backdropFilter: "var(--glass-blur)" }}
                 />
-                <foreignObject x={pos.x + 9} y={pos.y + 10} width={NW - 18} height={NH - 18}>
+                <foreignObject x={pos.x + 12} y={pos.y + 12} width={NW - 24} height={NH - 24}>
                   <div xmlns="http://www.w3.org/1999/xhtml" style={{
-                    fontSize: "10px", lineHeight: "1.55",
-                    color: sel ? T.text : T.textMuted,
-                    fontFamily: "system-ui",
+                    fontSize: "10.5px", lineHeight: "1.6",
+                    color: sel ? "var(--text)" : "var(--text-muted)",
+                    fontFamily: "var(--font-inter)",
                     overflow: "hidden", display: "-webkit-box",
                     WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
                   }}>
                     {node.event}
                   </div>
                 </foreignObject>
-                {node.happiness && <text x={pos.x + NW - 12} y={pos.y + NH - 6} fill={HAPP_C[node.happiness]} fontSize="10" fontFamily="system-ui" textAnchor="middle">{HAPP_ICON[node.happiness]}</text>}
+                {node.happiness && (
+                  <g>
+                    <circle cx={pos.x + NW - 12} cy={pos.y + NH - 12} r="8" fill="var(--bg)" stroke="var(--border)" strokeWidth="0.5" />
+                    <text x={pos.x + NW - 12} y={pos.y + NH - 9} fill={HAPP_C[node.happiness]} fontSize="9" fontFamily="sans-serif" textAnchor="middle">{HAPP_ICON[node.happiness]}</text>
+                  </g>
+                )}
               </g>
             );
           })}
@@ -680,7 +722,16 @@ export default function App() {
   const [loadingMsg, setLoadingMsg] = useState("AIが考えています...");
   const [error, setError] = useState("");
   const [story, setStory] = useState("");
+  const [useMock, setUseMock] = useState(true); // Default to Mock for development
   const [prevView, setPrevView] = useState("result");
+
+  async function callAI(sys, msg, type) {
+    if (useMock) {
+      await new Promise(r => setTimeout(r, 1000));
+      return JSON.stringify(MOCK_RESPONSE[type] || { text: MOCK_RESPONSE.story });
+    }
+    return await gemini(sys, msg);
+  }
 
   const currentNode = nodes.find(n => n.id === currentNodeId) || null;
   const selectedNodes = nodes.filter(n => n.selected);
@@ -690,7 +741,7 @@ export default function App() {
     setLoading(true); setLoadingMsg("分岐を生成しています..."); setError("");
     try {
       const { sys, msg } = promptBranch(prof, parentNode.event, history);
-      const text = await claude(sys, msg);
+      const text = await callAI(sys, msg, "branch");
       const parsed = parseJson(text);
       if (!parsed?.branches?.length) throw new Error("Invalid response");
       const nb = parsed.branches.map(b => ({
@@ -716,7 +767,7 @@ export default function App() {
     try {
       const history = nodes.filter(n => n.selected).map(n => n.event);
       const { sys, msg } = promptResult(profile, branch.event, history);
-      const text = await claude(sys, msg);
+      const text = await callAI(sys, msg, "result");
       const parsed = parseJson(text);
       const sel = { ...branch, result: parsed.result || "結果を取得できませんでした", happiness: parsed.happiness || "medium", selected: true };
       const others = branches.filter(b => b.id !== branch.id);
@@ -747,8 +798,9 @@ export default function App() {
     setLoading(true); setLoadingMsg("ストーリーを生成しています..."); setError("");
     try {
       const { sys, msg } = promptStory(profile, nodes.filter(n => n.selected));
-      const text = await claude(sys, msg);
-      setStory(text); setPrevView(view); setView("story");
+      const text = await callAI(sys, msg, "story");
+      setStory(text.startsWith("{") ? JSON.parse(text).text : text); 
+      setView("story");
     } catch {
       setError("ストーリーの生成に失敗しました。");
     } finally { setLoading(false); }
@@ -781,7 +833,7 @@ export default function App() {
           background: T.bg,
         }}>
           <span style={{ fontSize: "0.82rem", color: T.textSub, letterSpacing: "0.02em" }}>
-            人生の分岐点
+            人生の分岐点 (Gemini)
           </span>
           {profile && (
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -797,6 +849,14 @@ export default function App() {
               <span style={{ color: T.textFaint, fontSize: "0.76rem" }}>
                 {profile.name} · {stepCount}選択
               </span>
+              <Btn 
+                variant="ghost" 
+                small 
+                onClick={() => setUseMock(!useMock)}
+                style={{ color: useMock ? "var(--success)" : "var(--text-muted)", fontSize: "0.65rem", padding: "4px 8px" }}
+              >
+                {useMock ? "MOCK ON" : "MOCK OFF"}
+              </Btn>
             </div>
           )}
         </header>
