@@ -1,4 +1,4 @@
-const { GoogleGenAI } = require("@google/genai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const fs = require("fs");
 
 function loadEnv() {
@@ -21,14 +21,13 @@ async function main() {
     process.exit(1);
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: "Say 'SDK integration successful!' in Japanese."
-    });
-    console.log(response.text);
+    const result = await model.generateContent("Say 'SDK integration successful!' in Japanese.");
+    const response = await result.response;
+    console.log(response.text());
   } catch (error) {
     console.error("Error during SDK test:", error);
   }

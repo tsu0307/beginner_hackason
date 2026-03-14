@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 
 export async function POST(req) {
   try {
@@ -11,25 +11,41 @@ export async function POST(req) {
       return NextResponse.json({ error: "API key is not configured" }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-    const geminiModel = model || "gemini-2.0-flash";
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiModel = model || "gemini-flash-latest"; 
     
-    // 最初のリクエストを送信する形式に合わせる
-    const userMessage = messages.find(m => m.role === "user")?.content || "";
+    // 安全設定を緩和
+    const safetySettings = [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    ];
 
-    const response = await ai.models.generateContent({
+    const modelInstance = genAI.getGenerativeModel({ 
       model: geminiModel,
       systemInstruction: system,
+      safetySettings,
+    });
+
+    const userMessage = messages.find(m => m.role === "user")?.content || "";
+
+    console.log(`[Gemini Request] Model: ${geminiModel}`);
+
+    const result = await modelInstance.generateContent({
       contents: [{ role: "user", parts: [{ text: userMessage }] }],
       generationConfig: {
-        maxOutputTokens: max_tokens || 1000,
-        temperature: 0.7,
+        maxOutputTokens: max_tokens || 2000,
+        temperature: 0, // 決定論的な出力を得て JSON を安定させる
+        responseMimeType: "application/json", // JSON モードを再有効化
       }
     });
 
-    const text = response.text || "";
+    const response = await result.response;
+    const text = response.text();
     
-    // フロントエンドが期待する Claude 形式のレスポンスに変換
+    console.log(`[Gemini Response] Length: ${text.length}`);
+
     const formattedResponse = {
       content: [
         { type: "text", text: text }
@@ -39,9 +55,14 @@ export async function POST(req) {
     return NextResponse.json(formattedResponse);
   } catch (error) {
     console.error("Gemini API Proxy Error:", error);
+    
+    // 404 エラー（モデル未発見）の場合、gemini-pro にフォールバックを試みるなどの処理も検討可能
+    const status = error.status || 500;
+    const errorMessage = error.message || "Internal Server Error";
+    
     return NextResponse.json({ 
-      error: "Internal Server Error", 
-      details: error.message 
-    }, { status: 500 });
+      error: errorMessage, 
+      details: error.details || [] 
+    }, { status: status });
   }
 }
