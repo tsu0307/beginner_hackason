@@ -1,0 +1,2 @@
+今後UIのデザインを変更したい場合 BaseComponents.jsx を編集
+AIの出力を調整したい場合 config.js を編集
